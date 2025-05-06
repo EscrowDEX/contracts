@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Multi-Chain Escrow Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+            background: white;
+        }
+
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .token-logo {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+        }
+
+        #adminSection {
+            display: none;
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        #tokenSearchResults {
+            position: absolute;
+            z-index: 1000;
+            width: 100%;
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 0 0 5px 5px;
+            display: none;
+        }
+
+        .token-result {
+            padding: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .token-result:hover {
+            background-color: #f8f9fa;
+        }
+
+        #transactionStatus {
+            margin-top: 20px;
+        }
+
+        #termsHashDisplay {
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.8em;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .network-selector {
+            margin-right: 15px;
+        }
+
+        .network-badge {
+            margin-left: 5px;
+            font-size: 0.7em;
+        }
+
+        .wallet-info {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Escrow Dashboard</h1>
+            <div class="d-flex align-items-center">
+                <select id="networkSelector" class="form-select network-selector">
+                    <option value="0x1">Ethereum</option>
+                    <option value="0x89">Polygon</option>
+                    <option value="0x38">BSC</option>
+                    <option value="0xa4b1">Arbitrum</option>
+                    <option value="0xa">Optimism</option>
+                    <option value="0xa86a">Avalanche</option>
+                    <option value="0x2105">Base</option>
+                </select>
+                <button id="connectWalletBtn" class="btn btn-primary">Connect Wallet</button>
+            </div>
+        </div>
+
+        <div id="walletInfo" class="alert alert-info wallet-info" style="display: none;"></div>
+
+        <ul class="nav nav-tabs mb-4" id="navTabs">
+            <li class="nav-item"><a class="nav-link active" href="#" data-page="create">Create Deal</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-page="manage">Manage Deals</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-page="read">View Data</a></li>
+            <li class="nav-item" id="adminTabItem" style="display:none"><a class="nav-link" href="#"
+                    data-page="admin">Admin</a></li>
+        </ul>
+
+        <div id="createPage" class="page-content">
+            <div class="card p-4">
+                <h4>Create New Deal</h4>
+                <div class="mb-3">
+                    <label class="form-label">Seller Address</label>
+                    <input type="text" id="sellerAddress" class="form-control" placeholder="0x...">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Token</label>
+                    <div class="search-container">
+                        <input type="text" id="tokenSearch" class="form-control"
+                            placeholder="Search token (USDC, MATIC...)">
+                        <div id="tokenSearchResults"></div>
+                    </div>
+                </div>
+                <div id="selectedTokenInfo" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center">
+                        <img id="tokenLogo" src="" class="token-logo">
+                        <div>
+                            <strong id="tokenName"></strong> (<span id="tokenSymbol"></span>)
+                            <div class="text-muted small">Decimals: <span id="tokenDecimals"></span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Amount</label>
+                    <div class="input-group">
+                        <input type="number" id="amountInput" class="form-control" placeholder="1.0" step="0.000001">
+                        <span class="input-group-text" id="tokenSymbolDisplay">TOKEN</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contract Terms</label>
+                    <textarea id="termsInput" class="form-control" rows="5"
+                        placeholder="Describe the agreement terms..."></textarea>
+                    <div class="d-flex justify-content-between mt-2">
+                        <button id="generateHashBtn" class="btn btn-sm btn-outline-primary">Generate Hash</button>
+                        <button id="downloadTermsBtn" class="btn btn-sm btn-outline-secondary">Download Terms</button>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">Keccak256 Hash:</small>
+                        <div id="termsHashDisplay"></div>
+                    </div>
+                </div>
+                <button id="approveTokenBtn" class="btn btn-warning mb-3">Approve Token Transfer</button>
+                <button id="createDealBtn" class="btn btn-success" disabled>Create Escrow Deal</button>
+            </div>
+        </div>
+
+        <div id="managePage" class="page-content" style="display: none;">
+            <div class="card p-4">
+                <h4>Accept Deal</h4>
+                <div class="mb-3">
+                    <label class="form-label">Deal ID</label>
+                    <input type="number" id="acceptDealId" class="form-control">
+                </div>
+                <button id="acceptDealBtn" class="btn btn-success" disabled>Accept Deal</button>
+            </div>
+
+            <div class="card p-4">
+                <h4>Dispute Deal</h4>
+                <div class="mb-3">
+                    <label class="form-label">Deal ID</label>
+                    <input type="number" id="disputeDealId" class="form-control">
+                </div>
+                <button id="disputeDealBtn" class="btn btn-warning" disabled>Dispute Deal</button>
+            </div>
+
+            <div class="card p-4">
+                <h4>Withdraw Funds</h4>
+                <div class="mb-3">
+                    <label class="form-label">Token</label>
+                    <div class="search-container">
+                        <input type="text" id="withdrawTokenSearch" class="form-control"
+                            placeholder="Search token (USDC, MATIC...)">
+                        <div id="withdrawTokenResults"></div>
+                    </div>
+                </div>
+                <div id="selectedWithdrawTokenInfo" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center">
+                        <img id="withdrawTokenLogo" src="" class="token-logo">
+                        <div>
+                            <strong id="withdrawTokenName"></strong> (<span id="withdrawTokenSymbol"></span>)
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Amount</label>
+                    <input type="number" id="withdrawAmount" class="form-control">
+                </div>
+                <button id="withdrawBtn" class="btn btn-primary" disabled>Withdraw</button>
+            </div>
+        </div>
+
+        <div id="readPage" class="page-content" style="display: none;">
+            <div class="card p-4">
+                <h4>View Deal Info</h4>
+                <div class="mb-3">
+                    <label class="form-label">Deal ID</label>
+                    <input type="number" id="viewDealId" class="form-control">
+                </div>
+                <button id="viewDealBtn" class="btn btn-info">View Deal</button>
+                <div id="dealInfo" class="mt-3"></div>
+            </div>
+
+            <div class="card p-4">
+                <h4>View Balances</h4>
+                <div class="mb-3">
+                    <label class="form-label">Address</label>
+                    <input type="text" id="balanceAddress" class="form-control" placeholder="0x...">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Token</label>
+                    <div class="search-container">
+                        <input type="text" id="balanceTokenSearch" class="form-control"
+                            placeholder="Search token (USDC, MATIC...)">
+                        <div id="balanceTokenResults"></div>
+                    </div>
+                </div>
+                <button id="viewBalanceBtn" class="btn btn-info">View Balance</button>
+                <div id="balanceInfo" class="mt-3"></div>
+            </div>
+        </div>
+
+        <div id="adminPage" class="page-content" style="display: none;">
+            <div class="card p-4">
+                <h4>Resolve Dispute</h4>
+                <div class="mb-3">
+                    <label class="form-label">Deal ID</label>
+                    <input type="number" id="resolveDealId" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Favor Buyer?</label>
+                    <select id="favorBuyer" class="form-select">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+                <button id="resolveDisputeBtn" class="btn btn-danger" disabled>Resolve Dispute</button>
+            </div>
+
+            <div class="card p-4">
+                <h4>Withdraw Fees</h4>
+                <div class="mb-3">
+                    <label class="form-label">Token</label>
+                    <div class="search-container">
+                        <input type="text" id="feeTokenSearch" class="form-control"
+                            placeholder="Search token (USDC, MATIC...)">
+                        <div id="feeTokenResults"></div>
+                    </div>
+                </div>
+                <div id="selectedFeeTokenInfo" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center">
+                        <img id="feeTokenLogo" src="" class="token-logo">
+                        <div>
+                            <strong id="feeTokenName"></strong> (<span id="feeTokenSymbol"></span>)
+                        </div>
+                    </div>
+                </div>
+                <button id="withdrawFeesBtn" class="btn btn-primary" disabled>Withdraw Fees</button>
+            </div>
+        </div>
+
+        <div id="transactionStatus" class="mt-3"></div>
+    </div>
+
+    <script>
+        const CONTRACT_ADDRESS = "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf";
+        const CONTRACT_ABI = [
+            "function createDeal(address _seller, uint256 _amount, address _tokenAddress, bytes32 _termsHash) external",
+            "function acceptDeal(uint256 _dealId) external",
+            "function disputeDeal(uint256 _dealId) external",
+            "function withdraw(address _to, uint256 amount, address _tokenAddress) external",
+            "function resolveDispute(uint256 _dealId, bool _favorBuyer) external",
+            "function withdrawFees(address _to, address _tokenAddress) external",
+            "function getTermsHash(uint256 _dealId) view returns (bytes32)",
+            "function getUserBalance(address _user, address _tokenAddress) view returns (uint256)",
+            "function getAdminBalance(address _tokenAddress) view returns (uint256)",
+            "function deals(uint256) view returns (address buyer, address seller, uint256 amount, bool disputed, bool resolved, bool buyerAccepted, bool sellerAccepted, bytes32 termsHash)",
+            "function admin() view returns (address)"
+        ];
+
+        const NETWORKS = {
+            "0x1": { name: "Ethereum", symbol: "ETH", explorer: "https://etherscan.io" },
+            "0x89": { name: "Polygon", symbol: "MATIC", explorer: "https://polygonscan.com" },
+            "0x38": { name: "BSC", symbol: "BNB", explorer: "https://bscscan.com" },
+            "0xa4b1": { name: "Arbitrum", symbol: "ETH", explorer: "https://arbiscan.io" },
+            "0xa": { name: "Optimism", symbol: "ETH", explorer: "https://optimistic.etherscan.io" },
+            "0xa86a": { name: "Avalanche", symbol: "AVAX", explorer: "https://snowtrace.io" },
+            "0x2105": { name: "Base", symbol: "ETH", explorer: "https://basescan.org" }
+        };
+
+        const GAS_LIMIT = 300000;
+        const UNISWAP_TOKEN_LIST = "https://tokens.uniswap.org";
+
+        let provider, signer, escrowContract;
+        let isAdmin = false;
+        let currentAccount = null;
+        let currentChainId = null;
+        let tokenList = [];
+        let selectedToken = null;
+        let selectedWithdrawToken = null;
+        let selectedFeeToken = null;
+        let selectedBalanceToken = null;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            initApp();
+        });
+
+        function initApp() {
+            setupNavigation();
+            loadTokenList();
+            setupEventListeners();
+            setupNetworkSelector();
+            checkConnectedWallet();
+        }
+
+        function setupNavigation() {
+            document.querySelectorAll('[data-page]').forEach(tab => {
+                tab.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    document.querySelectorAll('.page-content').forEach(page => page.style.display = 'none');
+                    document.getElementById(`${this.dataset.page}Page`).style.display = 'block';
+                    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+        }
+
+        async function loadTokenList() {
+            try {
+                const response = await fetch(UNISWAP_TOKEN_LIST);
+                tokenList = (await response.json()).tokens;
+            } catch (e) {
+                tokenList = [
+                    { name: "Matic Token", symbol: "MATIC", address: "0x0000000000000000000000000000000000001010", decimals: 18, logoURI: "https://cryptologos.cc/logos/polygon-matic-logo.png" },
+                    { name: "USD Coin", symbol: "USDC", address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6, logoURI: "https://cryptologos.cc/logos/usd-coin-usdc-logo.png" }
+                ];
+            }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+            document.getElementById('generateHashBtn').addEventListener('click', generateTermsHash);
+            document.getElementById('downloadTermsBtn').addEventListener('click', downloadTerms);
+            document.getElementById('approveTokenBtn').addEventListener('click', approveToken);
+            document.getElementById('createDealBtn').addEventListener('click', createDeal);
+            document.getElementById('acceptDealBtn').addEventListener('click', acceptDeal);
+            document.getElementById('disputeDealBtn').addEventListener('click', disputeDeal);
+            document.getElementById('withdrawBtn').addEventListener('click', withdraw);
+            document.getElementById('resolveDisputeBtn').addEventListener('click', resolveDispute);
+            document.getElementById('withdrawFeesBtn').addEventListener('click', withdrawFees);
+            document.getElementById('viewDealBtn').addEventListener('click', viewDeal);
+            document.getElementById('viewBalanceBtn').addEventListener('click', viewBalance);
+
+            setupTokenSearch('tokenSearch', 'tokenSearchResults', token => {
+                selectedToken = token;
+                document.getElementById('selectedTokenInfo').style.display = 'block';
+                document.getElementById('tokenName').textContent = token.name;
+                document.getElementById('tokenSymbol').textContent = token.symbol;
+                document.getElementById('tokenDecimals').textContent = token.decimals;
+                document.getElementById('tokenSymbolDisplay').textContent = token.symbol;
+                document.getElementById('tokenLogo').src = token.logoURI;
+                document.getElementById('approveTokenBtn').disabled = false;
+            });
+
+            setupTokenSearch('withdrawTokenSearch', 'withdrawTokenResults', token => {
+                selectedWithdrawToken = token;
+                document.getElementById('selectedWithdrawTokenInfo').style.display = 'block';
+                document.getElementById('withdrawTokenName').textContent = token.name;
+                document.getElementById('withdrawTokenSymbol').textContent = token.symbol;
+                document.getElementById('withdrawTokenLogo').src = token.logoURI;
+            });
+
+            setupTokenSearch('feeTokenSearch', 'feeTokenResults', token => {
+                selectedFeeToken = token;
+                document.getElementById('selectedFeeTokenInfo').style.display = 'block';
+                document.getElementById('feeTokenName').textContent = token.name;
+                document.getElementById('feeTokenSymbol').textContent = token.symbol;
+                document.getElementById('feeTokenLogo').src = token.logoURI;
+            });
+
+            setupTokenSearch('balanceTokenSearch', 'balanceTokenResults', token => {
+                selectedBalanceToken = token;
+            });
+        }
+
+        function setupTokenSearch(inputId, resultsId, onSelect) {
+            const input = document.getElementById(inputId);
+            const results = document.getElementById(resultsId);
+
+            input.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                if (searchTerm.length < 2) {
+                    results.style.display = 'none';
+                    return;
+                }
+
+                const currentChainTokens = tokenList.filter(t => t.chainId === parseInt(currentChainId, 16));
+                const filtered = currentChainTokens.filter(t =>
+                    t.symbol.toLowerCase().includes(searchTerm) || t.name.toLowerCase().includes(searchTerm)
+                ).slice(0, 10);
+
+                displayTokenResults(filtered, results, onSelect);
+            });
+        }
+
+        function displayTokenResults(tokens, container, onSelect) {
+            container.innerHTML = '';
+            tokens.forEach(token => {
+                const div = document.createElement('div');
+                div.className = 'token-result';
+                div.innerHTML = `
+                    <img src="${token.logoURI}" class="token-logo" onerror="this.src='https://etherscan.io/images/main/empty-token.png'">
+                    <div>
+                        <strong>${token.symbol}</strong> - ${token.name}
+                        <div class="text-muted small">${token.address}</div>
+                    </div>
+                `;
+                div.addEventListener('click', () => {
+                    onSelect(token);
+                    container.style.display = 'none';
+                });
+                container.appendChild(div);
+            });
+            container.style.display = 'block';
+        }
+
+        function setupNetworkSelector() {
+            const selector = document.getElementById('networkSelector');
+            selector.addEventListener('change', async (e) => {
+                if (!window.ethereum) return;
+
+                try {
+                    await switchNetwork(e.target.value);
+                } catch (error) {
+                    console.error("Network switch error:", error);
+                }
+            });
+        }
+
+        async function switchNetwork(chainId) {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId }],
+                });
+                updateNetworkInfo(chainId);
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    try {
+                        await addNetworkToWallet(chainId);
+                        updateNetworkInfo(chainId);
+                    } catch (addError) {
+                        throw addError;
+                    }
+                } else {
+                    throw switchError;
+                }
+            }
+        }
+
+        async function addNetworkToWallet(chainId) {
+            const params = getNetworkParams(chainId);
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [params],
+            });
+        }
+
+        function getNetworkParams(chainId) {
+            const chains = {
+                "0x1": {
+                    chainName: "Ethereum Mainnet",
+                    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                    rpcUrls: ["https://mainnet.infura.io/v3/"],
+                    blockExplorerUrls: ["https://etherscan.io"]
+                },
+                "0x89": {
+                    chainName: "Polygon Mainnet",
+                    nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+                    rpcUrls: ["https://polygon-rpc.com/"],
+                    blockExplorerUrls: ["https://polygonscan.com/"]
+                },
+                "0x38": {
+                    chainName: "Binance Smart Chain",
+                    nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+                    rpcUrls: ["https://bsc-dataseed.binance.org/"],
+                    blockExplorerUrls: ["https://bscscan.com"]
+                },
+                "0xa4b1": {
+                    chainName: "Arbitrum One",
+                    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                    rpcUrls: ["https://arb1.arbitrum.io/rpc"],
+                    blockExplorerUrls: ["https://arbiscan.io"]
+                },
+                "0xa": {
+                    chainName: "Optimism",
+                    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                    rpcUrls: ["https://mainnet.optimism.io"],
+                    blockExplorerUrls: ["https://optimistic.etherscan.io"]
+                },
+                "0xa86a": {
+                    chainName: "Avalanche C-Chain",
+                    nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
+                    rpcUrls: ["https://api.avax.network/ext/bc/C/rpc"],
+                    blockExplorerUrls: ["https://snowtrace.io"]
+                },
+                "0x2105": {
+                    chainName: "Base Mainnet",
+                    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                    rpcUrls: ["https://mainnet.base.org"],
+                    blockExplorerUrls: ["https://basescan.org"]
+                }
+            };
+            return { chainId, ...chains[chainId] };
+        }
+
+        async function connectWallet() {
+            if (!window.ethereum) {
+                showStatus("Please install MetaMask", "danger");
+                return;
+            }
+
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+                currentChainId = chainId;
+                document.getElementById('networkSelector').value = chainId;
+
+                await setupProviderAndContract();
+                updateWalletInfo(accounts[0], chainId);
+
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                window.ethereum.on('chainChanged', handleChainChanged);
+
+            } catch (error) {
+                showStatus(`Connection error: ${error.message}`, "danger");
+            }
+        }
+
+        async function setupProviderAndContract() {
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+            escrowContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            await checkAdminStatus();
+            enableWriteButtons();
+        }
+
+        function updateWalletInfo(account, chainId) {
+            currentAccount = account;
+            currentChainId = chainId;
+
+            const network = NETWORKS[chainId] || { name: "Unknown", symbol: "ETH" };
+            const walletInfo = document.getElementById('walletInfo');
+
+            walletInfo.style.display = 'block';
+            walletInfo.innerHTML = `
+                <span>Connected: ${account.substring(0, 6)}...${account.substring(38)}</span>
+                <span class="network-badge badge bg-secondary">${network.name}</span>
+            `;
+        }
+
+        function updateNetworkInfo(chainId) {
+            currentChainId = chainId;
+            document.getElementById('networkSelector').value = chainId;
+
+            const network = NETWORKS[chainId] || { name: "Unknown", symbol: "ETH" };
+            const badge = document.querySelector('#walletInfo .network-badge');
+            if (badge) {
+                badge.textContent = network.name;
+            }
+
+            setupProviderAndContract();
+        }
+
+        async function checkAdminStatus() {
+            try {
+                const adminAddress = await escrowContract.admin();
+                isAdmin = (currentAccount.toLowerCase() === adminAddress.toLowerCase());
+                document.getElementById('adminTabItem').style.display = isAdmin ? 'block' : 'none';
+                document.getElementById('resolveDisputeBtn').disabled = !isAdmin;
+                document.getElementById('withdrawFeesBtn').disabled = !isAdmin;
+            } catch (error) {
+                console.error("Error checking admin status:", error);
+            }
+        }
+
+        function enableWriteButtons() {
+            document.getElementById('approveTokenBtn').disabled = false;
+            document.getElementById('acceptDealBtn').disabled = false;
+            document.getElementById('disputeDealBtn').disabled = false;
+            document.getElementById('withdrawBtn').disabled = false;
+        }
+
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                document.getElementById('walletInfo').style.display = 'none';
+            } else {
+                updateWalletInfo(accounts[0], currentChainId);
+                checkAdminStatus();
+            }
+        }
+
+        function handleChainChanged(chainId) {
+            updateNetworkInfo(chainId);
+        }
+
+        function generateTermsHash() {
+            const terms = document.getElementById('termsInput').value;
+            if (!terms) return;
+            document.getElementById('termsHashDisplay').textContent = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(terms));
+        }
+
+        function downloadTerms() {
+            const terms = document.getElementById('termsInput').value;
+            if (!terms) return;
+            const blob = new Blob([terms], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `escrow-terms-${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        async function approveToken() {
+            if (!selectedToken) return;
+            const amount = document.getElementById('amountInput').value;
+            if (!amount || isNaN(amount)) {
+                showStatus("Please enter a valid amount", "warning");
+                return;
+            }
+
+            try {
+                const tokenContract = new ethers.Contract(selectedToken.address, [
+                    "function approve(address spender, uint256 amount) external returns (bool)",
+                    "function decimals() view returns (uint8)"
+                ], signer);
+
+                const decimals = await tokenContract.decimals();
+                const tx = await tokenContract.approve(CONTRACT_ADDRESS, ethers.utils.parseUnits(amount, decimals), { gasLimit: GAS_LIMIT });
+                showStatus(`Approval transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus("Token approved successfully! You can now create the deal", "success");
+                document.getElementById('createDealBtn').disabled = false;
+            } catch (error) {
+                showStatus(`Approval error: ${error.message}`, "danger");
+            }
+        }
+
+        async function createDeal() {
+            if (!selectedToken) return;
+            const seller = document.getElementById('sellerAddress').value;
+            const terms = document.getElementById('termsInput').value;
+            const amount = document.getElementById('amountInput').value;
+
+            try {
+                if (!ethers.utils.isAddress(seller)) {
+                    showStatus("Invalid seller address", "warning");
+                    return;
+                }
+
+                const tx = await escrowContract.createDeal(
+                    seller,
+                    ethers.utils.parseUnits(amount, selectedToken.decimals),
+                    selectedToken.address,
+                    document.getElementById('termsHashDisplay').textContent,
+                    { gasLimit: GAS_LIMIT }
+                );
+
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                const receipt = await tx.wait();
+
+                let dealId;
+                for (const log of receipt.logs) {
+                    try {
+                        const parsedLog = escrowContract.interface.parseLog(log);
+                        if (parsedLog.name === "DealCreated") {
+                            dealId = parsedLog.args.dealId.toString();
+                            break;
+                        }
+                    } catch (e) { continue; }
+                }
+
+                showStatus(`Escrow deal created! Deal ID: ${dealId}`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function acceptDeal() {
+            const dealId = document.getElementById('acceptDealId').value;
+            if (!dealId) return;
+
+            try {
+                const tx = await escrowContract.acceptDeal(dealId, { gasLimit: GAS_LIMIT });
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus(`Deal ${dealId} accepted successfully!`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function disputeDeal() {
+            const dealId = document.getElementById('disputeDealId').value;
+            if (!dealId) return;
+
+            try {
+                const tx = await escrowContract.disputeDeal(dealId, { gasLimit: GAS_LIMIT });
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus(`Deal ${dealId} disputed successfully!`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function withdraw() {
+            if (!selectedWithdrawToken) return;
+            const amount = document.getElementById('withdrawAmount').value;
+            if (!amount) return;
+
+            try {
+                const tx = await escrowContract.withdraw(
+                    currentAccount,
+                    ethers.utils.parseUnits(amount, selectedWithdrawToken.decimals),
+                    selectedWithdrawToken.address,
+                    { gasLimit: GAS_LIMIT }
+                );
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus(`Withdrawn ${amount} ${selectedWithdrawToken.symbol} successfully!`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function resolveDispute() {
+            if (!isAdmin) return;
+            const dealId = document.getElementById('resolveDealId').value;
+            const favorBuyer = document.getElementById('favorBuyer').value === 'true';
+
+            try {
+                const tx = await escrowContract.resolveDispute(dealId, favorBuyer, { gasLimit: GAS_LIMIT });
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus(`Dispute for deal ${dealId} resolved successfully!`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function withdrawFees() {
+            if (!isAdmin || !selectedFeeToken) return;
+            try {
+                const tx = await escrowContract.withdrawFees(currentAccount, selectedFeeToken.address, { gasLimit: GAS_LIMIT });
+                showStatus(`Transaction sent: ${tx.hash}`, "info");
+                await tx.wait();
+                showStatus(`Fees withdrawn for ${selectedFeeToken.symbol} successfully!`, "success");
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function viewDeal() {
+            const dealId = document.getElementById('viewDealId').value;
+            if (!dealId) return;
+
+            try {
+                const deal = await escrowContract.deals(dealId);
+                const termsHash = await escrowContract.getTermsHash(dealId);
+                document.getElementById('dealInfo').innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h5>Deal ${dealId}</h5>
+                            <p><strong>Buyer:</strong> ${deal.buyer}</p>
+                            <p><strong>Seller:</strong> ${deal.seller}</p>
+                            <p><strong>Amount:</strong> ${ethers.utils.formatUnits(deal.amount, 18)}</p>
+                            <p><strong>Status:</strong> ${deal.resolved ? "Resolved" : deal.disputed ? "Disputed" : "Active"}</p>
+                            <p><strong>Terms Hash:</strong> ${termsHash}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        async function viewBalance() {
+            const address = document.getElementById('balanceAddress').value || currentAccount;
+            if (!selectedBalanceToken) return;
+
+            try {
+                const balance = await escrowContract.getUserBalance(address, selectedBalanceToken.address);
+                const formattedBalance = ethers.utils.formatUnits(balance, selectedBalanceToken.decimals);
+                document.getElementById('balanceInfo').innerHTML = `
+                    <div class="alert alert-success">
+                        Balance: ${formattedBalance} ${selectedBalanceToken.symbol}
+                    </div>
+                `;
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, "danger");
+            }
+        }
+
+        function showStatus(message, type = "info") {
+            const statusEl = document.getElementById('transactionStatus');
+            statusEl.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        }
+
+        async function checkConnectedWallet() {
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                document.getElementById('networkSelector').value = chainId;
+                await setupProviderAndContract();
+                updateWalletInfo(window.ethereum.selectedAddress, chainId);
+            }
+        }
+    </script>
+</body>
+
+</html>

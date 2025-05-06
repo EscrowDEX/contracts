@@ -1,0 +1,30 @@
+{
+  "polygon": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T22:06:01.867Z"
+  },
+  "arbitrum": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T22:08:33.322Z"
+  },
+  "base": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T22:11:53.907Z"
+  },
+  "optimism": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T22:19:04.994Z"
+  },
+  "ethereum": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T22:22:28.125Z"
+  },
+  "bsc": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T23:04:09.323Z"
+  },
+  "avalanche": {
+    "address": "0x9cEe6DFBE35F564AEd6798115Bddb46b7dCECCcf",
+    "deployedAt": "2025-05-05T23:09:35.122Z"
+  }
+}
