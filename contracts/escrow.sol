@@ -112,6 +112,12 @@ contract Escrow is ReentrancyGuard {
         onlyValidAddress(_tokenAddress)
         nonReentrant
     {
+        uint256 balanceBefore = IERC20(_tokenAddress).balanceOf(msg.sender);
+        require(
+            balanceBefore >= _amount,
+            "Insufficient token balance to create deal"
+        );
+
         uint256 fee = (_amount * FEE_PERCENTAGE) / 100;
         uint256 amountAfterFee = _amount - fee;
 
@@ -119,6 +125,12 @@ contract Escrow is ReentrancyGuard {
             msg.sender,
             address(this),
             _amount
+        );
+
+        uint256 balanceAfter = IERC20(_tokenAddress).balanceOf(msg.sender);
+        require(
+            balanceAfter == balanceBefore - _amount,
+            "Token transfer failed"
         );
 
         dealIdCounter++;
