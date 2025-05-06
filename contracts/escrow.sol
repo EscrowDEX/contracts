@@ -91,7 +91,7 @@ contract Escrow is ReentrancyGuard {
     }
 
     modifier onlyValidAmount(uint256 _amount) {
-        require(_amount > 0, "Amount must be greater than zero");
+        require(_amount >= 100, "Amount must be at least 100 to avoid zero fees");
         _;
     }
 
